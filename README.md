@@ -1,6 +1,7 @@
-# Yitong'sPersonal Gym Tracker
+# Yitong's Personal Gym Tracker
 
 ## Main features
+![CleanShot 2025-06-15 at 10 35 24@2x](https://github.com/user-attachments/assets/b8fa4f35-0c03-44b3-9df8-760149cb9d0f)
 
 **Workout tracking**
 1. Create a workout
