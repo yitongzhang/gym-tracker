@@ -9,7 +9,6 @@
 /* Begin PBXBuildFile section */
 		495364A42DFF2F5D0066A426 /* gym_trackerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 495364A32DFF2F5D0066A426 /* gym_trackerApp.swift */; };
 		495364A62DFF2F5D0066A426 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 495364A52DFF2F5D0066A426 /* ContentView.swift */; };
-		495364A82DFF2F5D0066A426 /* Item.swift in Sources */ = {isa = PBXBuildFile; fileRef = 495364A72DFF2F5D0066A426 /* Item.swift */; };
 		495364AA2DFF2F5E0066A426 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 495364A92DFF2F5E0066A426 /* Assets.xcassets */; };
 		495364AE2DFF2F5E0066A426 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 495364AD2DFF2F5E0066A426 /* Preview Assets.xcassets */; };
 		495364B82DFF2F5E0066A426 /* gym_trackerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 495364B72DFF2F5E0066A426 /* gym_trackerTests.swift */; };
@@ -38,7 +37,6 @@
 		495364A02DFF2F5D0066A426 /* gym-tracker.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "gym-tracker.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		495364A32DFF2F5D0066A426 /* gym_trackerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = gym_trackerApp.swift; sourceTree = "<group>"; };
 		495364A52DFF2F5D0066A426 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
-		495364A72DFF2F5D0066A426 /* Item.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Item.swift; sourceTree = "<group>"; };
 		495364A92DFF2F5E0066A426 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		495364AB2DFF2F5E0066A426 /* gym_tracker.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = gym_tracker.entitlements; sourceTree = "<group>"; };
 		495364AD2DFF2F5E0066A426 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
@@ -99,7 +97,6 @@
 			children = (
 				495364A32DFF2F5D0066A426 /* gym_trackerApp.swift */,
 				495364A52DFF2F5D0066A426 /* ContentView.swift */,
-				495364A72DFF2F5D0066A426 /* Item.swift */,
 				495364A92DFF2F5E0066A426 /* Assets.xcassets */,
 				495364AB2DFF2F5E0066A426 /* gym_tracker.entitlements */,
 				495364AC2DFF2F5E0066A426 /* Preview Content */,
@@ -263,7 +260,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				495364A62DFF2F5D0066A426 /* ContentView.swift in Sources */,
-				495364A82DFF2F5D0066A426 /* Item.swift in Sources */,
 				495364A42DFF2F5D0066A426 /* gym_trackerApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
