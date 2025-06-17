@@ -228,6 +228,8 @@ struct ContentView: View {
     @State private var workoutManager: WorkoutManager?
     @State private var showWorkoutSheet = false
     @State private var currentMonth = Date()
+    @State private var showWorkoutDetailSheet = false
+    @State private var selectedWorkoutDate: Date?
     private let calendar = Calendar.current
     
     var body: some View {
@@ -264,7 +266,7 @@ struct ContentView: View {
                 VStack(spacing: 0) {
                     HStack {
                         if let manager = workoutManager {
-                            let stats = manager.getWorkoutStats()
+                            let stats: (workoutsPerWeek: Int, workoutsThisMonth: Int, exercisesPerWorkout: Int, exercisesThisMonth: Int) = manager.getWorkoutStats()
                             statCell(number: stats.workoutsPerWeek, label: "WORKOUTS PER WEEK")
                             Divider()
                             statCell(number: stats.workoutsThisMonth, label: "WORKOUTS THIS MONTH")
@@ -278,7 +280,7 @@ struct ContentView: View {
                     Divider()
                     HStack {
                         if let manager = workoutManager {
-                            let stats = manager.getWorkoutStats()
+                            let stats: (workoutsPerWeek: Int, workoutsThisMonth: Int, exercisesPerWorkout: Int, exercisesThisMonth: Int) = manager.getWorkoutStats()
                             statCell(number: stats.exercisesPerWorkout, label: "EXERCISES PER WORKOUT")
                             Divider()
                             statCell(number: stats.exercisesThisMonth, label: "EXERCISES THIS MONTH")
@@ -318,9 +320,7 @@ struct ContentView: View {
         }
         .background(Color.white.ignoresSafeArea())
         .onAppear {
-            if workoutManager == nil {
-                workoutManager = WorkoutManager(modelContext: modelContext)
-            }
+            setupWorkoutManager()
         }
         .sheet(isPresented: $showWorkoutSheet) {
             if let manager = workoutManager {
@@ -328,6 +328,19 @@ struct ContentView: View {
                     .presentationDetents([.large])
                     .presentationDragIndicator(.visible)
             }
+        }
+        .sheet(isPresented: $showWorkoutDetailSheet) {
+            if let manager = workoutManager, let selectedDate = selectedWorkoutDate {
+                WorkoutDetailView(workoutManager: manager, selectedDate: selectedDate)
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
+            }
+        }
+    }
+    
+        private func setupWorkoutManager() {
+        if workoutManager == nil {
+            workoutManager = WorkoutManager(modelContext: modelContext)
         }
     }
     
@@ -348,16 +361,41 @@ struct ContentView: View {
         let days = daysInMonth(for: date)
         let firstWeekday = firstWeekdayOfMonth(for: date)
         let columns = Array(repeating: GridItem(.flexible()), count: 7)
+        let workoutDates = getWorkoutDatesForMonth(date)
+        
         return LazyVGrid(columns: columns, spacing: 8) {
             ForEach(0..<(days + firstWeekday), id: \.self) { i in
                 if i < firstWeekday {
                     Text("")
-                        .frame(height: 24)
+                        .frame(height: 32)
                 } else {
-                    Text("\(i - firstWeekday + 1)")
-                        .font(.system(size: 20, weight: .medium))
-                        .foregroundColor(.black)
-                        .frame(height: 24)
+                    let dayNumber = i - firstWeekday + 1
+                    let hasWorkout = workoutDates.contains(dayNumber)
+                    
+                    Button(action: {
+                        if hasWorkout {
+                            selectedWorkoutDate = dateForDay(dayNumber, in: date)
+                            showWorkoutDetailSheet = true
+                        }
+                    }) {
+                        VStack(spacing: 2) {
+                            Text("\(dayNumber)")
+                                .font(.system(size: 20, weight: .medium))
+                                .foregroundColor(.black)
+                            
+                            if hasWorkout {
+                                Circle()
+                                    .fill(Color.red)
+                                    .frame(width: 6, height: 6)
+                            } else {
+                                Circle()
+                                    .fill(Color.clear)
+                                    .frame(width: 6, height: 6)
+                            }
+                        }
+                    }
+                    .frame(height: 32)
+                    .buttonStyle(PlainButtonStyle())
                 }
             }
         }
@@ -373,6 +411,32 @@ struct ContentView: View {
         let components = calendar.dateComponents([.year, .month], from: date)
         guard let firstOfMonth = calendar.date(from: components) else { return 0 }
         return calendar.component(.weekday, from: firstOfMonth) - 1 // Sunday = 1
+    }
+    
+    func getWorkoutDatesForMonth(_ date: Date) -> Set<Int> {
+        guard let manager = workoutManager else { return Set() }
+        
+        let workouts = manager.getAllWorkouts()
+        let monthComponents = calendar.dateComponents([.year, .month], from: date)
+        
+        let workoutDays = workouts.compactMap { workout -> Int? in
+            let workoutComponents = calendar.dateComponents([.year, .month, .day], from: workout.date)
+            
+            // Check if workout is in the same month/year as the calendar month
+            if workoutComponents.year == monthComponents.year &&
+               workoutComponents.month == monthComponents.month {
+                return workoutComponents.day
+            }
+            return nil
+        }
+        
+        return Set(workoutDays)
+    }
+    
+    func dateForDay(_ day: Int, in month: Date) -> Date {
+        var components = calendar.dateComponents([.year, .month], from: month)
+        components.day = day
+        return calendar.date(from: components) ?? month
     }
     
     func statCell(number: Int, label: String) -> some View {
@@ -391,6 +455,127 @@ struct ContentView: View {
     }
 }
 
+struct WorkoutDetailView: View {
+    let workoutManager: WorkoutManager
+    let selectedDate: Date
+    private let calendar = Calendar.current
+    
+    var workoutsForDate: [Workout] {
+        let allWorkouts = workoutManager.getAllWorkouts()
+        return allWorkouts.filter { workout in
+            calendar.isDate(workout.date, inSameDayAs: selectedDate)
+        }
+    }
+    
+    var dayStats: (exercises: Int, sets: Int, reps: Int, weight: Double) {
+        let workouts = workoutsForDate
+        let totalExercises = workouts.reduce(0) { $0 + $1.exercises.count }
+        let totalSets = workouts.reduce(0) { $0 + $1.totalSets }
+        let totalReps = workouts.reduce(0) { $0 + $1.totalReps }
+        let totalWeight = workouts.reduce(0) { $0 + $1.totalWeight }
+        return (totalExercises, totalSets, totalReps, totalWeight)
+    }
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header
+            VStack(spacing: 16) {
+                Text(formatDateHeader(selectedDate))
+                    .font(.system(size: 36, weight: .black, design: .default))
+                    .italic()
+                    .padding(.top, 16)
+                
+                // Stats Row
+                HStack(spacing: 32) {
+                    let stats = dayStats
+                    dayStatBlock(number: stats.exercises, label: "EXE")
+                    dayStatBlock(number: stats.sets, label: "SETS")
+                    dayStatBlock(number: stats.reps, label: "REPS")
+                    dayStatBlock(number: stats.weight / 1000, label: "K LBS")
+                }
+                .padding(.bottom, 24)
+            }
+            .background(Color.white)
+            
+            // Exercise List
+            ScrollView {
+                LazyVStack(spacing: 16) {
+                    ForEach(workoutsForDate, id: \.id) { workout in
+                        ForEach(workout.exercises, id: \.id) { workoutExercise in
+                            if let template = workoutExercise.exerciseTemplate {
+                                HStack {
+                                    Text(formatExerciseEntry(workoutExercise))
+                                        .font(.system(size: 18, weight: .medium))
+                                        .foregroundColor(.black)
+                                    
+                                    Spacer()
+                                    
+                                    Text(template.name)
+                                        .font(.system(size: 18, weight: .medium))
+                                        .foregroundColor(.black)
+                                }
+                                .padding(.horizontal, 24)
+                            }
+                        }
+                    }
+                }
+                .padding(.vertical, 16)
+            }
+        }
+        .background(Color.white.ignoresSafeArea())
+    }
+    
+    private func formatDateHeader(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEEE MMMM d"
+        return formatter.string(from: date)
+    }
+    
+    private func formatExerciseEntry(_ workoutExercise: WorkoutExercise) -> String {
+        let sets = workoutExercise.sets.count
+        let repsRange = workoutExercise.sets.map { $0.reps }
+        let weightRange = workoutExercise.sets.map { Int($0.weight) }
+        
+        if let minReps = repsRange.min(), let maxReps = repsRange.max(),
+           let minWeight = weightRange.min(), let maxWeight = weightRange.max() {
+            
+            if minReps == maxReps && minWeight == maxWeight {
+                return "\(sets) x \(minReps) x \(minWeight) lbs"
+            } else if minWeight == maxWeight {
+                return "\(sets) x \(minReps)-\(maxReps) x \(minWeight) lbs"
+            } else {
+                return "\(sets) x \(minReps) x \(minWeight)-\(maxWeight) lbs"
+            }
+        }
+        
+        return "\(sets) sets"
+    }
+    
+    private func dayStatBlock(number: Double, label: String) -> some View {
+        VStack(spacing: 4) {
+            Text(String(format: "%.1f", number))
+                .font(.system(size: 28, weight: .black, design: .default))
+                .italic()
+                .foregroundColor(.black)
+            Text(label)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(.gray)
+        }
+    }
+    
+    private func dayStatBlock(number: Int, label: String) -> some View {
+        VStack(spacing: 4) {
+            Text(String(format: "%02d", number))
+                .font(.system(size: 28, weight: .black, design: .default))
+                .italic()
+                .foregroundColor(.black)
+            Text(label)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(.gray)
+        }
+    }
+}
+
 struct WorkoutTrackingView: View {
     @Environment(\.dismiss) private var dismiss
     let workoutManager: WorkoutManager
@@ -406,8 +591,58 @@ struct WorkoutTrackingView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Top Card
+        ZStack {
+            // Background
+            Color.white.ignoresSafeArea()
+                .zIndex(0)
+            
+            // Scrollable Exercise Grid
+            ScrollView {
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 24) {
+                    ForEach(exercises, id: \.id) { exercise in
+                        Button(action: {
+                            selectedExercise = exercise
+                            showExerciseTracking = true
+                        }) {
+                            VStack(spacing: 0) {
+                                if let personalBest = exercise.allTimePersonalBest {
+                                    Text("\(Int(personalBest))lbs")
+                                        .font(.system(size: 18, weight: .semibold, design: .default))
+                                        .italic()
+                                        .foregroundColor(.gray)
+                                        .padding(.bottom, 2)
+                                } else {
+                                    Text("--lbs")
+                                        .font(.system(size: 18, weight: .semibold, design: .default))
+                                        .italic()
+                                        .foregroundColor(.gray)
+                                        .padding(.bottom, 2)
+                                }
+                                Text(exercise.name)
+                                    .font(.system(size: 24, weight: .black, design: .default))
+                                    .italic()
+                                    .multilineTextAlignment(.center)
+                                    .foregroundColor(.black)
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 80)
+                            .padding()
+                            .background(Color.white)
+                            .cornerRadius(16)
+                            .shadow(color: Color.black.opacity(0.03), radius: 2, x: 0, y: 2)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .stroke(Color.gray.opacity(0.10), lineWidth: 1)
+                            )
+                        }
+                    }
+                }
+                .padding(.horizontal, 24)
+                .padding(.top, 200) // Top padding to account for fixed top card
+                .padding(.bottom, 120) // Bottom padding to account for fixed segmented control
+            }
+            .zIndex(1)
+            
+            // Fixed Top Card
             VStack(spacing: 0) {
                 HStack {
                     Text(timeString(from: elapsed) + " MINS")
@@ -426,17 +661,11 @@ struct WorkoutTrackingView: View {
                     .padding(.vertical, 8)
                 Divider().padding(.vertical, 8)
                 HStack(spacing: 24) {
-                    if let workout = workoutManager.currentWorkout {
-                        statBlock(number: workout.exercises.count, label: "EXE")
-                        statBlock(number: workout.totalSets, label: "SETS")
-                        statBlock(number: workout.totalReps, label: "REPS")
-                        statBlock(number: Int(workout.totalWeight / 1000), label: "K LBS")
-                    } else {
-                        statBlock(number: 0, label: "EXE")
-                        statBlock(number: 0, label: "SETS")
-                        statBlock(number: 0, label: "REPS")
-                        statBlock(number: 0, label: "K LBS")
-                    }
+                    let workout = workoutManager.currentWorkout
+                    statBlock(number: workout?.exercises.count ?? 0, label: "EXE")
+                    statBlock(number: workout?.totalSets ?? 0, label: "SETS")
+                    statBlock(number: workout?.totalReps ?? 0, label: "REPS")
+                    statBlock(number: Int((workout?.totalWeight ?? 0) / 1000), label: "K LBS")
                 }
                 .padding(.bottom, 8)
             }
@@ -448,49 +677,10 @@ struct WorkoutTrackingView: View {
                     .stroke(Color.gray.opacity(0.15), lineWidth: 1)
             )
             .padding(24)
-            // Exercise Grid
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 24) {
-                ForEach(exercises, id: \.id) { exercise in
-                    Button(action: {
-                        selectedExercise = exercise
-                        showExerciseTracking = true
-                    }) {
-                        VStack(spacing: 0) {
-                            if let personalBest = exercise.allTimePersonalBest {
-                                Text("\(Int(personalBest))lbs")
-                                    .font(.system(size: 18, weight: .semibold, design: .default))
-                                    .italic()
-                                    .foregroundColor(.gray)
-                                    .padding(.bottom, 2)
-                            } else {
-                                Text("--lbs")
-                                    .font(.system(size: 18, weight: .semibold, design: .default))
-                                    .italic()
-                                    .foregroundColor(.gray)
-                                    .padding(.bottom, 2)
-                            }
-                            Text(exercise.name)
-                                .font(.system(size: 24, weight: .black, design: .default))
-                                .italic()
-                                .multilineTextAlignment(.center)
-                                .foregroundColor(.black)
-                        }
-                        .frame(maxWidth: .infinity, minHeight: 80)
-                        .padding()
-                        .background(Color.white)
-                        .cornerRadius(16)
-                        .shadow(color: Color.black.opacity(0.03), radius: 2, x: 0, y: 2)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 16)
-                                .stroke(Color.gray.opacity(0.10), lineWidth: 1)
-                        )
-                    }
-                }
-            }
-            .padding(.horizontal, 24)
-            .padding(.bottom, 16)
-            Spacer()
-            // Segmented Control
+            .frame(maxHeight: .infinity, alignment: .top)
+            .zIndex(2)
+            
+            // Fixed Segmented Control
             HStack(spacing: 16) {
                 ForEach(ExerciseGroup.allCases, id: \.self) { group in
                     Button(action: { selectedGroup = group }) {
@@ -520,8 +710,9 @@ struct WorkoutTrackingView: View {
             )
             .padding(.horizontal, 24)
             .padding(.bottom, 16)
+            .frame(maxHeight: .infinity, alignment: .bottom)
+            .zIndex(2)
         }
-        .background(Color(.systemGroupedBackground).ignoresSafeArea())
         .onAppear {
             startTimer()
         }
@@ -577,6 +768,9 @@ struct ExerciseTrackingView: View {
     @State private var currentWeight: Double = 100
     @State private var currentReps: Int = 8
     @State private var currentWorkoutExercise: WorkoutExercise?
+    @State private var isResting: Bool = false
+    @State private var restTimeRemaining: TimeInterval = 0
+    @State private var restTimer: Timer? = nil
     
     var exerciseHistory: [WorkoutExercise] {
         let allWorkouts = workoutManager.getAllWorkouts()
@@ -654,79 +848,104 @@ struct ExerciseTrackingView: View {
         .padding(24)
         
         let inputControls = VStack(spacing: 32) {
-            HStack(spacing: 64) {
-                // Weight Input
-                VStack {
-                    Button(action: { currentWeight += 5 }) {
-                        Image(systemName: "chevron.up")
-                            .font(.system(size: 20, weight: .bold))
-                            .foregroundColor(.red)
-                    }
-                    
-                    Text("\(Int(currentWeight))")
-                        .font(.system(size: 64, weight: .black, design: .default))
+            if isResting {
+                // Rest Timer UI
+                VStack(spacing: 32) {
+                    Text("\(Int(restTimeRemaining))")
+                        .font(.system(size: 120, weight: .black, design: .default))
                         .italic()
-                        .foregroundColor(.red)
+                        .foregroundColor(.black)
                     
-                    Text("LBS")
+                    Text("REST TIME")
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.gray)
                     
-                    Button(action: { 
-                        if currentWeight > 5 { currentWeight -= 5 }
-                    }) {
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 20, weight: .bold))
+                    Button(action: skipRest) {
+                        Text("Skip it")
+                            .font(.system(size: 28, weight: .black, design: .default))
+                            .italic()
+                            .foregroundColor(.black)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 64)
+                    }
+                    .padding(.horizontal, 24)
+                }
+            } else {
+                // Normal Input UI
+                HStack(spacing: 64) {
+                    // Weight Input
+                    VStack {
+                        Button(action: { currentWeight += 5 }) {
+                            Image(systemName: "chevron.up")
+                                .font(.system(size: 20, weight: .bold))
+                                .foregroundColor(.red)
+                        }
+                        
+                        Text("\(Int(currentWeight))")
+                            .font(.system(size: 64, weight: .black, design: .default))
+                            .italic()
                             .foregroundColor(.red)
+                        
+                        Text("LBS")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.gray)
+                        
+                        Button(action: { 
+                            if currentWeight > 5 { currentWeight -= 5 }
+                        }) {
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 20, weight: .bold))
+                                .foregroundColor(.red)
+                        }
+                    }
+                    
+                    // Reps Input
+                    VStack {
+                        Button(action: { currentReps += 1 }) {
+                            Image(systemName: "chevron.up")
+                                .font(.system(size: 20, weight: .bold))
+                                .foregroundColor(.red)
+                        }
+                        
+                        Text(String(format: "%02d", currentReps))
+                            .font(.system(size: 64, weight: .black, design: .default))
+                            .italic()
+                            .foregroundColor(.red)
+                        
+                        Text("REPS")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.gray)
+                        
+                        Button(action: { 
+                            if currentReps > 1 { currentReps -= 1 }
+                        }) {
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 20, weight: .bold))
+                                .foregroundColor(.red)
+                        }
                     }
                 }
                 
-                // Reps Input
-                VStack {
-                    Button(action: { currentReps += 1 }) {
-                        Image(systemName: "chevron.up")
-                            .font(.system(size: 20, weight: .bold))
-                            .foregroundColor(.red)
-                    }
-                    
-                    Text(String(format: "%02d", currentReps))
-                        .font(.system(size: 64, weight: .black, design: .default))
+                Text("SWIPE TO COMPLETE EXERCISE")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.gray)
+                    .padding(.bottom, 8)
+                
+                // Log Set Button
+                Button(action: logSet) {
+                    Text("Log Set")
+                        .font(.system(size: 28, weight: .black, design: .default))
                         .italic()
-                        .foregroundColor(.red)
-                    
-                    Text("REPS")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.gray)
-                    
-                    Button(action: { 
-                        if currentReps > 1 { currentReps -= 1 }
-                    }) {
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 20, weight: .bold))
-                            .foregroundColor(.red)
-                    }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 64)
+                        .background(
+                            RoundedRectangle(cornerRadius: 32)
+                                .fill(Color.red)
+                        )
                 }
+                .padding(.horizontal, 24)
             }
-            
-            Text("SWIPE TO COMPLETE EXERCISE")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundColor(.gray)
-                .padding(.bottom, 8)
-            
-            // Log Set Button
-            Button(action: logSet) {
-                Text("Log Set")
-                    .font(.system(size: 28, weight: .black, design: .default))
-                    .italic()
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 64)
-                    .background(
-                        RoundedRectangle(cornerRadius: 32)
-                            .fill(Color.red)
-                    )
-            }
-            .padding(.horizontal, 24)
         }
         .padding(.bottom, 32)
         
@@ -735,10 +954,13 @@ struct ExerciseTrackingView: View {
             Spacer()
             inputControls
         }
-        .background(Color(red: 0.95, green: 0.95, blue: 0.97).ignoresSafeArea())
+        .background(Color.white.ignoresSafeArea())
         .onAppear {
             setupCurrentWorkoutExercise()
             setDefaultValues()
+        }
+        .onDisappear {
+            restTimer?.invalidate()
         }
     }
     
@@ -775,6 +997,33 @@ struct ExerciseTrackingView: View {
         
         // Save the context
         try? workoutManager.modelContext.save()
+        
+        // Start rest timer
+        startRestTimer()
+    }
+    
+    private func startRestTimer() {
+        isResting = true
+        restTimeRemaining = exercise.suggestedRestTime
+        
+        restTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
+            if restTimeRemaining > 0 {
+                restTimeRemaining -= 1
+            } else {
+                endRest()
+            }
+        }
+    }
+    
+    private func skipRest() {
+        endRest()
+    }
+    
+    private func endRest() {
+        restTimer?.invalidate()
+        restTimer = nil
+        isResting = false
+        restTimeRemaining = 0
     }
     
     private func formatHistoryEntry(_ workoutExercise: WorkoutExercise) -> String {
